@@ -13,7 +13,7 @@ import requests
 
 API_URL = os.getenv(
     "API_URL",
-     "https://deepfake-audio-detection-1-68km.onrender.com/predict"
+    "https://deepfake-audio-detection-5.onrender.com/predict"
 )
 
 # ------------------------------------------------------------
