@@ -13,9 +13,8 @@ import requests
 
 API_URL = os.getenv(
     "API_URL",
-    "https://deepfake-audio-detection-n612.onrender.com/predict"
+    "https://deepfake-audio-detection-1-68km.onrender.com/predict"
 )
-
 
 # ------------------------------------------------------------
 # SEND AUDIO TO FASTAPI FOR PREDICTION
