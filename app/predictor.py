@@ -13,35 +13,14 @@ from app.feature_extraction import extract_features
 # PROJECT PATHS
 # ------------------------------------------------------------
 
-# This file is inside: deepfake_audio_app/app/
 APP_DIR = Path(__file__).resolve().parent
-
-# Project root: deepfake_audio_app/
 PROJECT_ROOT = APP_DIR.parent
-
-# Models directory
 MODELS_DIR = PROJECT_ROOT / "models"
 
 
 # ------------------------------------------------------------
-# LOAD TRAINED ARTIFACTS
+# FEATURE NAMES
 # ------------------------------------------------------------
-
-model = joblib.load(
-    MODELS_DIR / "final_lightgbm_model.pkl"
-)
-
-scaler = joblib.load(
-    MODELS_DIR / "scaler.pkl"
-)
-
-pca = joblib.load(
-    MODELS_DIR / "pca.pkl"
-)
-
-label_encoder = joblib.load(
-    MODELS_DIR / "label_encoder.pkl"
-)
 
 feature_names = [
     "MFCC_1",
@@ -66,13 +45,64 @@ feature_names = [
     "Beat_Frames"
 ]
 
+
+# ------------------------------------------------------------
+# LOAD COMMON PREPROCESSING ARTIFACTS
+# ------------------------------------------------------------
+
+scaler = joblib.load(
+    MODELS_DIR / "scaler.pkl"
+)
+
+pca = joblib.load(
+    MODELS_DIR / "pca.pkl"
+)
+
+label_encoder = joblib.load(
+    MODELS_DIR / "label_encoder.pkl"
+)
+
+
+# ------------------------------------------------------------
+# AVAILABLE MODELS
+# ------------------------------------------------------------
+
+AVAILABLE_MODELS = {
+    "LightGBM (Final Model)": MODELS_DIR / "final_lightgbm_model.pkl"
+}
+
+
+# ------------------------------------------------------------
+# LOAD MODEL
+# ------------------------------------------------------------
+
+def load_model(model_name):
+    """
+    Load the selected trained model.
+    """
+
+    if model_name not in AVAILABLE_MODELS:
+        raise ValueError(
+            f"Model '{model_name}' is not available."
+        )
+
+    model_path = AVAILABLE_MODELS[model_name]
+
+    if not model_path.exists():
+        raise FileNotFoundError(
+            f"Model file not found: {model_path.name}"
+        )
+
+    return joblib.load(model_path)
+
+
 # ------------------------------------------------------------
 # PREDICTION FUNCTION
 # ------------------------------------------------------------
 
-def predict_audio(file_path):
+def predict_audio(file_path, model_name="LightGBM (Final Model)"):
     """
-    Perform end-to-end prediction on an uploaded audio file.
+    Perform end-to-end prediction on an audio file.
 
     Pipeline:
     Audio File
@@ -83,44 +113,52 @@ def predict_audio(file_path):
         ↓
     PCA
         ↓
-    LightGBM
+    Selected ML Model
         ↓
     Bonafide / Fake Prediction
     """
 
-    # Step 1: Extract the 20 audio features
+    # Step 1: Load selected model
+    model = load_model(model_name)
+
+    # Step 2: Extract audio features
     features = extract_features(file_path)
 
-    # Step 2: Create DataFrame using exact training feature order
+    # Step 3: Create DataFrame using exact training feature order
     features_df = pd.DataFrame(
         [features],
         columns=feature_names
     )
 
-    # Step 3: Apply the saved scaler
+    # Step 4: Apply saved scaler
     features_scaled = scaler.transform(features_df)
 
-    # Step 4: Apply the saved PCA transformation
+    # Step 5: Apply saved PCA
     features_pca = pca.transform(features_scaled)
 
-    # Step 5: Make prediction
-    prediction_encoded = model.predict(features_pca)[0]
+    # Step 6: Make prediction
+    prediction_encoded = model.predict(
+        features_pca
+    )[0]
 
-    # Step 6: Get prediction probabilities
-    probabilities = model.predict_proba(features_pca)[0]
+    # Step 7: Get probabilities
+    probabilities = model.predict_proba(
+        features_pca
+    )[0]
 
-    # Step 7: Convert encoded prediction to original label
+    # Step 8: Convert encoded prediction to original label
     prediction_label = label_encoder.inverse_transform(
         [prediction_encoded]
     )[0]
 
-    # Step 8: Calculate confidence
+    # Step 9: Calculate confidence
     confidence = float(
         probabilities[prediction_encoded] * 100
     )
 
-    # Return result in a clean dictionary
+    # Step 10: Return result
     return {
         "prediction": prediction_label,
-        "confidence": round(confidence, 2)
+        "confidence": round(confidence, 2),
+        "model": model_name
     }

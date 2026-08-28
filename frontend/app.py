@@ -3,8 +3,8 @@
 # ============================================================
 
 import os
-import gradio as gr
 import requests
+import gradio as gr
 
 
 # ------------------------------------------------------------
@@ -16,20 +16,45 @@ API_URL = os.getenv(
     "https://deepfake-audio-detection-8.onrender.com/predict"
 )
 
+
+# ------------------------------------------------------------
+# AVAILABLE MODELS
+# ------------------------------------------------------------
+
+MODEL_OPTIONS = [
+    "LightGBM (Final Model)"
+]
+
+
 # ------------------------------------------------------------
 # SEND AUDIO TO FASTAPI FOR PREDICTION
 # ------------------------------------------------------------
 
-def detect_audio(audio_file):
+def detect_audio(audio_file, model_name):
 
     if audio_file is None:
         return (
-            "⚠️ No audio file uploaded",
-            "Please upload an MP3, WAV, FLAC, or OGG file."
+            "⚠️ No audio provided",
+            "Please upload an audio file or record audio using the microphone."
+        )
+
+    if model_name is None:
+        return (
+            "⚠️ No model selected",
+            "Please select a model before analysis."
         )
 
     try:
+
+        # ----------------------------------------------------
+        # GET FILE NAME
+        # ----------------------------------------------------
+
         filename = os.path.basename(audio_file)
+
+        # ----------------------------------------------------
+        # SEND AUDIO + MODEL TO FASTAPI
+        # ----------------------------------------------------
 
         with open(audio_file, "rb") as file:
 
@@ -42,6 +67,9 @@ def detect_audio(audio_file):
                         "audio/mpeg"
                     )
                 },
+                data={
+                    "model_name": model_name
+                },
                 timeout=120
             )
 
@@ -49,33 +77,62 @@ def detect_audio(audio_file):
 
         result = response.json()
 
+        # ----------------------------------------------------
+        # GET RESULTS
+        # ----------------------------------------------------
+
         prediction = result["prediction"]
-        confidence = float(result["confidence"])
-
-        if prediction.lower() == "fake":
-            prediction_result = "⚠️ FAKE AUDIO DETECTED"
-        else:
-            prediction_result = "✅ BONAFIDE AUDIO DETECTED"
-
-        confidence_result = (
-            f"{confidence:.2f}% confidence"
+        confidence = float(
+            result["confidence"]
         )
 
-        return prediction_result, confidence_result
+        selected_model = result.get(
+            "model",
+            model_name
+        )
+
+        # ----------------------------------------------------
+        # FORMAT PREDICTION
+        # ----------------------------------------------------
+
+        if prediction.lower() == "fake":
+
+            prediction_result = (
+                "⚠️ FAKE AUDIO DETECTED"
+            )
+
+        else:
+
+            prediction_result = (
+                "✅ BONAFIDE AUDIO DETECTED"
+            )
+
+        confidence_result = (
+            f"{confidence:.2f}% confidence\n"
+            f"Model: {selected_model}"
+        )
+
+        return (
+            prediction_result,
+            confidence_result
+        )
 
     except requests.exceptions.ConnectionError:
+
         return (
             "❌ BACKEND CONNECTION ERROR",
-            "Please make sure the FastAPI server is running."
+            "Please check the FastAPI backend."
         )
 
     except requests.exceptions.Timeout:
+
         return (
             "⏳ REQUEST TIMEOUT",
             "Audio processing took too long. Please try again."
         )
 
     except Exception as e:
+
         return (
             "❌ PREDICTION FAILED",
             str(e)
@@ -83,10 +140,11 @@ def detect_audio(audio_file):
 
 
 # ------------------------------------------------------------
-# CUSTOM CSS FOR PROFESSIONAL DASHBOARD
+# CUSTOM CSS
 # ------------------------------------------------------------
 
 custom_css = """
+
 .gradio-container {
     max-width: 1100px !important;
     margin: auto !important;
@@ -110,6 +168,7 @@ custom_css = """
     margin-top: 25px;
     font-size: 14px;
 }
+
 """
 
 
@@ -122,7 +181,10 @@ with gr.Blocks(
     css=custom_css
 ) as demo:
 
-    # Header
+    # --------------------------------------------------------
+    # HEADER
+    # --------------------------------------------------------
+
     gr.HTML("""
     <div class="main-title">
         <h1>🎙️ Deepfake Audio Detection System</h1>
@@ -132,32 +194,47 @@ with gr.Blocks(
 
     gr.Markdown("""
     <div class="subtitle">
-    Upload a raw audio file and the trained machine learning pipeline will
-    analyze its acoustic characteristics and classify it as
-    <b>Bonafide</b> or <b>Fake</b>.
+    Upload an audio file or record your voice using the microphone.
+    The trained machine learning pipeline will analyze its acoustic
+    characteristics and classify it as <b>Bonafide</b> or <b>Fake</b>.
     </div>
     """)
 
 
+    # --------------------------------------------------------
+    # INPUT + RESULTS
+    # --------------------------------------------------------
+
     with gr.Row():
 
         # ----------------------------------------------------
-        # LEFT SIDE - INPUT
+        # LEFT SIDE
         # ----------------------------------------------------
 
         with gr.Column(scale=1):
 
-            gr.Markdown("## 📁 Upload Audio")
+            gr.Markdown(
+                "## 🎙️ Audio Input"
+            )
 
-            audio_input = gr.File(
-                label="Supported formats: MP3, WAV, FLAC, OGG",
-                file_types=[
-                    ".mp3",
-                    ".wav",
-                    ".flac",
-                    ".ogg"
+            audio_input = gr.Audio(
+                sources=[
+                    "upload",
+                    "microphone"
                 ],
-                type="filepath"
+                type="filepath",
+                label="Upload Audio or Record from Microphone"
+            )
+
+            gr.Markdown(
+                "## 🤖 Model Selection"
+            )
+
+            model_dropdown = gr.Dropdown(
+                choices=MODEL_OPTIONS,
+                value=MODEL_OPTIONS[0],
+                label="Select Detection Model",
+                info="Choose the trained model for prediction."
             )
 
             detect_button = gr.Button(
@@ -168,12 +245,14 @@ with gr.Blocks(
 
 
         # ----------------------------------------------------
-        # RIGHT SIDE - RESULTS
+        # RIGHT SIDE
         # ----------------------------------------------------
 
         with gr.Column(scale=1):
 
-            gr.Markdown("## 🤖 Detection Results")
+            gr.Markdown(
+                "## 🤖 Detection Results"
+            )
 
             prediction_output = gr.Textbox(
                 label="Classification",
@@ -189,7 +268,7 @@ with gr.Blocks(
 
 
     # --------------------------------------------------------
-    # MODEL INFORMATION
+    # MODEL PIPELINE INFORMATION
     # --------------------------------------------------------
 
     gr.Markdown("""
@@ -198,32 +277,36 @@ with gr.Blocks(
 
     **Audio Input → Feature Extraction → StandardScaler → PCA → LightGBM → Prediction**
 
-    The system extracts engineered acoustic features from the uploaded audio
-    and processes them through the trained classification pipeline.
+    The system extracts engineered acoustic features from the audio
+    and processes them through the selected trained classification model.
     """)
 
 
     # --------------------------------------------------------
-    # APPLICATION USAGE INFORMATION
+    # HOW TO USE
     # --------------------------------------------------------
 
     gr.Markdown("""
     ### 📌 How to Use
 
-    1. Upload one audio file in a supported format.
-    2. Click **ANALYZE AUDIO**.
-    3. Wait for the system to process the audio.
-    4. View the predicted class and model confidence.
+    1. Upload an audio file **or record audio using the microphone**.
+    2. Select the required detection model.
+    3. Click **ANALYZE AUDIO**.
+    4. Wait for the system to process the audio.
+    5. View the predicted class and model confidence.
     """)
 
 
     # --------------------------------------------------------
-    # CONNECT BUTTON TO FUNCTION
+    # CONNECT BUTTON
     # --------------------------------------------------------
 
     detect_button.click(
         fn=detect_audio,
-        inputs=audio_input,
+        inputs=[
+            audio_input,
+            model_dropdown
+        ],
         outputs=[
             prediction_output,
             confidence_output
@@ -231,7 +314,10 @@ with gr.Blocks(
     )
 
 
-    # Footer
+    # --------------------------------------------------------
+    # FOOTER
+    # --------------------------------------------------------
+
     gr.Markdown("""
     <div class="footer-text">
     Deepfake Audio Detection | Machine Learning Deployment - Phase 5
@@ -244,7 +330,10 @@ with gr.Blocks(
 # ------------------------------------------------------------
 
 if __name__ == "__main__":
+
     demo.launch(
         server_name="0.0.0.0",
-        server_port=int(os.environ.get("PORT", 7860))
+        server_port=int(
+            os.environ.get("PORT", 7860)
+        )
     )

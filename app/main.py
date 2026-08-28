@@ -6,10 +6,20 @@ from pathlib import Path
 import shutil
 import uuid
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import (
+    FastAPI,
+    UploadFile,
+    File,
+    Form,
+    HTTPException
+)
+
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.predictor import predict_audio
+from app.predictor import (
+    predict_audio,
+    AVAILABLE_MODELS
+)
 
 
 # ------------------------------------------------------------
@@ -59,17 +69,41 @@ def home():
 
 
 # ------------------------------------------------------------
+# AVAILABLE MODELS ENDPOINT
+# ------------------------------------------------------------
+
+@app.get("/models")
+def get_models():
+    return {
+        "models": list(AVAILABLE_MODELS.keys())
+    }
+
+
+# ------------------------------------------------------------
 # PREDICTION ENDPOINT
 # ------------------------------------------------------------
 
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
+async def predict(
+    file: UploadFile = File(...),
+    model_name: str = Form("LightGBM (Final Model)")
+):
 
-    # Allow common audio formats
-    allowed_extensions = {".mp3", ".wav", ".flac", ".ogg"}
+    # --------------------------------------------------------
+    # ALLOWED AUDIO FORMATS
+    # --------------------------------------------------------
+
+    allowed_extensions = {
+        ".mp3",
+        ".wav",
+        ".flac",
+        ".ogg"
+    }
 
     # Get uploaded file extension
-    file_extension = Path(file.filename).suffix.lower()
+    file_extension = Path(
+        file.filename
+    ).suffix.lower()
 
     # Validate file type
     if file_extension not in allowed_extensions:
@@ -81,7 +115,23 @@ async def predict(file: UploadFile = File(...)):
             )
         )
 
-    # Create a unique filename to avoid conflicts
+    # --------------------------------------------------------
+    # VALIDATE MODEL
+    # --------------------------------------------------------
+
+    if model_name not in AVAILABLE_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Selected model '{model_name}' "
+                "is not available."
+            )
+        )
+
+    # --------------------------------------------------------
+    # CREATE UNIQUE TEMPORARY FILE
+    # --------------------------------------------------------
+
     unique_filename = (
         f"{uuid.uuid4()}{file_extension}"
     )
@@ -89,28 +139,65 @@ async def predict(file: UploadFile = File(...)):
     file_path = UPLOAD_DIR / unique_filename
 
     try:
-        # Save uploaded audio temporarily
+
+        # ----------------------------------------------------
+        # SAVE UPLOADED AUDIO TEMPORARILY
+        # ----------------------------------------------------
+
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            shutil.copyfileobj(
+                file.file,
+                buffer
+            )
 
-        # Run complete prediction pipeline
-        result = predict_audio(str(file_path))
+        # ----------------------------------------------------
+        # RUN PREDICTION
+        # ----------------------------------------------------
 
-        # Return prediction as JSON
+        result = predict_audio(
+            str(file_path),
+            model_name
+        )
+
+        # ----------------------------------------------------
+        # RETURN JSON RESULT
+        # ----------------------------------------------------
+
         return {
             "filename": file.filename,
+            "model": result["model"],
             "prediction": result["prediction"],
             "confidence": result["confidence"]
         }
 
     except Exception as e:
+
         raise HTTPException(
             status_code=500,
             detail=f"Prediction failed: {str(e)}"
         )
 
     finally:
-        # Delete temporary uploaded file
+
+        # ----------------------------------------------------
+        # DELETE TEMPORARY AUDIO FILE
+        # ----------------------------------------------------
+
         if file_path.exists():
             file_path.unlink()
-            
+
+
+# ------------------------------------------------------------
+# RUN FASTAPI SERVER
+# ------------------------------------------------------------
+
+if __name__ == "__main__":
+
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True
+    )

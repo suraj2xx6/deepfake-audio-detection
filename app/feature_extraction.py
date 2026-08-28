@@ -1,38 +1,56 @@
 import librosa
 import numpy as np
-import pandas as pd
 
 
 def extract_features(file_path):
     """
-    Extract the 20 audio features required by the trained
-    Deepfake Audio Detection model.
+    Extract the exact 20 features used during model training.
 
-    The feature order matches the Phase 1 training dataset.
+    Feature order:
+    13 MFCCs
+    Zero Crossing Rate
+    RMS Energy
+    Spectral Centroid
+    Spectral Bandwidth
+    Spectral Rolloff
+    Tempo
+    Beat Frames
     """
 
-    # Load audio at the same sampling rate used during training
-    signal, sr = librosa.load(file_path, sr=22050)
+    # Load audio at the training sampling rate
+    signal, sr = librosa.load(
+        file_path,
+        sr=22050,
+        mono=True
+    )
 
-    # 1. MFCC features (13)
+    # 1–13. MFCC
     mfccs = librosa.feature.mfcc(
         y=signal,
         sr=sr,
         n_mfcc=13
     )
-    mfcc_mean = np.mean(mfccs, axis=1)
 
-    # 2. Zero Crossing Rate
+    mfcc_mean = np.mean(
+        mfccs,
+        axis=1
+    )
+
+    # 14. Zero Crossing Rate
     zcr = np.mean(
-        librosa.feature.zero_crossing_rate(signal)
+        librosa.feature.zero_crossing_rate(
+            y=signal
+        )
     )
 
-    # 3. RMS Energy
+    # 15. RMS Energy
     rms = np.mean(
-        librosa.feature.rms(y=signal)
+        librosa.feature.rms(
+            y=signal
+        )
     )
 
-    # 4. Spectral Centroid
+    # 16. Spectral Centroid
     spectral_centroid = np.mean(
         librosa.feature.spectral_centroid(
             y=signal,
@@ -40,7 +58,7 @@ def extract_features(file_path):
         )
     )
 
-    # 5. Spectral Bandwidth
+    # 17. Spectral Bandwidth
     spectral_bandwidth = np.mean(
         librosa.feature.spectral_bandwidth(
             y=signal,
@@ -48,7 +66,7 @@ def extract_features(file_path):
         )
     )
 
-    # 6. Spectral Rolloff
+    # 18. Spectral Rolloff
     spectral_rolloff = np.mean(
         librosa.feature.spectral_rolloff(
             y=signal,
@@ -56,22 +74,33 @@ def extract_features(file_path):
         )
     )
 
-    # 7. Chroma
-    chroma = np.mean(
-        librosa.feature.chroma_stft(
-            y=signal,
-            sr=sr
-        )
-    )
-
-    # 8. Beat Tempo
+    # 19. Tempo
     tempo = librosa.beat.beat_track(
         y=signal,
         sr=sr
     )[0]
 
-    # Combine all values in the same positional order
-    # used by the training dataset
+    # Convert tempo to scalar
+    tempo = float(
+        np.asarray(tempo).reshape(-1)[0]
+    )
+
+    # 20. Beat Frames
+    _, beat_frames = librosa.beat.beat_track(
+        y=signal,
+        sr=sr
+    )
+
+    # Training data stored Beat_Frames as a numerical value.
+    # Use the mean beat-frame position when beats are available.
+    if len(beat_frames) > 0:
+        beat_frames_value = float(
+            np.mean(beat_frames)
+        )
+    else:
+        beat_frames_value = 0.0
+
+    # Combine exactly 20 features
     features = np.hstack([
         mfcc_mean,
         zcr,
@@ -79,8 +108,8 @@ def extract_features(file_path):
         spectral_centroid,
         spectral_bandwidth,
         spectral_rolloff,
-        chroma,
-        tempo
+        tempo,
+        beat_frames_value
     ])
 
     return features
