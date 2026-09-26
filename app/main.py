@@ -95,6 +95,7 @@ async def predict(
 
     allowed_extensions = {
         ".mp3",
+        ".mpeg",
         ".wav",
         ".flac",
         ".ogg"
@@ -111,7 +112,7 @@ async def predict(
             status_code=400,
             detail=(
                 "Unsupported file format. "
-                "Please upload MP3, WAV, FLAC, or OGG audio."
+                "Please upload MP3, MPEG, WAV, FLAC, or OGG audio."
             )
         )
 

@@ -5,6 +5,7 @@
 import os
 import requests
 import gradio as gr
+from mimetypes import guess_type
 
 
 # ------------------------------------------------------------
@@ -30,6 +31,21 @@ MODEL_OPTIONS = [
 # SEND AUDIO TO FASTAPI FOR PREDICTION
 # ------------------------------------------------------------
 
+def get_audio_path(audio_file):
+
+    if isinstance(audio_file, dict):
+        audio_path = audio_file.get("path") or audio_file.get("name")
+    else:
+        audio_path = audio_file
+
+    if not audio_path or not os.path.isfile(audio_path):
+        raise FileNotFoundError(
+            "The uploaded audio file could not be found. Please upload it again."
+        )
+
+    return audio_path
+
+
 def detect_audio(audio_file, model_name):
 
     if audio_file is None:
@@ -50,13 +66,15 @@ def detect_audio(audio_file, model_name):
         # GET FILE NAME
         # ----------------------------------------------------
 
-        filename = os.path.basename(audio_file)
+        audio_path = get_audio_path(audio_file)
+        filename = os.path.basename(audio_path)
+        content_type = guess_type(filename)[0] or "application/octet-stream"
 
         # ----------------------------------------------------
         # SEND AUDIO + MODEL TO FASTAPI
         # ----------------------------------------------------
 
-        with open(audio_file, "rb") as file:
+        with open(audio_path, "rb") as file:
 
             response = requests.post(
                 API_URL,
@@ -64,7 +82,7 @@ def detect_audio(audio_file, model_name):
                     "file": (
                         filename,
                         file,
-                        "audio/mpeg"
+                        content_type
                     )
                 },
                 data={

@@ -1,7 +1,12 @@
 __pycache__/
 *.pyc
+**/__pycache__/
+**/.venv/
 .gradio/
 uploads/
+**/uploads/
+Phase5_Codebase/
+desktop.ini
 cloudflared.exe
 certificate.pem
 *.mp3
